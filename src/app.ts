@@ -1,3 +1,19 @@
+// Catch unhandled promise rejections
+process.on("unhandledRejection", (reason, promise) => {
+  console.error("Unhandled Rejection at:", promise, "\nReason:", reason);
+});
+
+// Catch uncaught exceptions
+process.on("uncaughtException", (err) => {
+  console.error("Uncaught Exception:", err);
+});
+
+// Optional: log when process is about to exit
+process.on("exit", (code) => {
+  console.log("Process exiting with code:", code);
+});
+
+
 import "dotenv/config";
 
 import { CONFIG } from "./config.js";
