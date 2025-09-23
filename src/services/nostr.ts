@@ -117,5 +117,6 @@ export class NostrService {
     ];
     const resp = await signEvent({ tags });
     pool.publish(this.relays, resp);
+    console.log("PUBLISHED ERROR EVENT", resp);
   }
 }

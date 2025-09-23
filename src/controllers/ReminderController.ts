@@ -12,7 +12,8 @@ export class ReminderController extends BaseController {
   }
 
   async createReminder(params: NRPCParams, event: Event) {
-    if (!params.time || !params.text) {
+    console.log("I GOT CALLED", params, params.Time, params.Text);
+    if (!params.Time || !params.Text || !params.Date) {
       const err: any = new Error("time and text required");
       err.status = 400;
       throw err;
