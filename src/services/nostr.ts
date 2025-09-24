@@ -6,7 +6,14 @@ Project layout remains the same (src/controllers, src/services, etc.)
 // ---------------------------
 // src/services/nostr.ts
 // ---------------------------
-import { Event, Filter, SimplePool } from "nostr-tools";
+import {
+  Event,
+  Filter,
+  nip19,
+  nip44,
+  SimplePool,
+  UnsignedEvent,
+} from "nostr-tools";
 import { CONFIG } from "../config.js";
 import {
   Methods,
@@ -35,8 +42,6 @@ export class NostrService {
   }
 
   async connect() {
-    assertServerKeys();
-
     this.subscribeRequests();
 
     // 🔁 Periodically refresh subscriptions
@@ -44,7 +49,7 @@ export class NostrService {
       console.log("[NostrService] refreshing subscriptions...");
       this.subscribeRequests();
       this.logRelayStates();
-    }, 60_000); // every 60s
+    }, 300_000); // every 60s
   }
 
   private async logRelayStates() {
@@ -63,7 +68,7 @@ export class NostrService {
 
   private subscribeRequests() {
     const filter: Filter = {
-      kinds: [CONFIG.kindRequest],
+      kinds: [CONFIG.kindRequest, CONFIG.giftWrapKind],
       "#p": [CONFIG.pubKeyHex],
     };
 
@@ -77,12 +82,38 @@ export class NostrService {
     this.subs.push(sub);
   }
 
+  private getRumorFromWrap(wrap: Event) {
+    const sk = nip19.decode(CONFIG.privKey!).data as Uint8Array;
+    const wrapConversationKey = nip44.getConversationKey(sk, wrap.pubkey);
+    const seal = JSON.parse(
+      nip44.decrypt(wrap.content, wrapConversationKey)
+    ) as Event;
+    const sealConversatioKey = nip44.getConversationKey(sk, seal.pubkey);
+    const rumor = JSON.parse(nip44.decrypt(seal.content, sealConversatioKey));
+    return rumor;
+  }
+
   private async handleRequestEvent(event: Event) {
+    console.log("GOT REQUEST EVENT", JSON.stringify(event));
+    let eventToProcess: (UnsignedEvent & { id: string }) | Event;
+    let callerPubkey: string;
+    if (event.kind === 22068) {
+      eventToProcess = event;
+      callerPubkey = event.pubkey;
+    } else if (event.kind === 21169) {
+      eventToProcess = this.getRumorFromWrap(event);
+      callerPubkey = eventToProcess.pubkey;
+    } else {
+      return;
+    }
+    console.log("EVENT TO BE PROCESSED IS", JSON.stringify(eventToProcess));
     try {
-      const pTags = event.tags.filter((t) => t[0] === "p").map((t) => t[1]);
+      const pTags = eventToProcess.tags
+        .filter((t) => t[0] === "p")
+        .map((t) => t[1]);
       if (!pTags.includes(CONFIG.pubKeyHex)) return;
 
-      const methodTag = event.tags.find((t) => t[0] === "method");
+      const methodTag = eventToProcess.tags.find((t) => t[0] === "method");
       if (!methodTag)
         return this.publishError(event, 400, "missing method tag");
       const method = methodTag[1];
@@ -95,7 +126,7 @@ export class NostrService {
         return this.publishError(event, 404, `method ${method} not found`);
 
       const handler = Methods.get(method)!;
-      const result = await handler(params, event, {});
+      const result = await handler(params, eventToProcess as Event, {});
       if (Array.isArray(result) && result[0]?.name && result[0]?.handler) {
         // Special case: this is getMethods (MethodSpec[])
         const tags: string[][] = [
@@ -133,7 +164,13 @@ export class NostrService {
           );
         }
 
-        const resp = await signEvent({ tags });
+        const resp = await signEvent(
+          { tags },
+          eventToProcess.id,
+          eventToProcess.kind === CONFIG.requestRumorKind,
+          callerPubkey
+        );
+        console.log("RESPONDING WITH RESP", JSON.stringify(resp));
         await pool.publish(this.relays, resp);
         return;
       }
@@ -144,7 +181,12 @@ export class NostrService {
           ["p", event.pubkey],
           ["status", "204"],
         ];
-        const resp = await signEvent({ tags });
+        const resp = await signEvent(
+          { tags },
+          eventToProcess.id,
+          eventToProcess.kind === CONFIG.requestRumorKind,
+          callerPubkey
+        );
         pool.publish(this.relays, resp);
         return;
       }
@@ -156,7 +198,12 @@ export class NostrService {
           ["status", "200"],
           ["result_json", JSON.stringify(result)],
         ];
-        const resp = await signEvent({ tags });
+        const resp = await signEvent(
+          { tags },
+          eventToProcess.id,
+          eventToProcess.kind === CONFIG.requestRumorKind,
+          callerPubkey
+        );
         await pool.publish(this.relays, resp);
         return;
       }
@@ -167,7 +214,12 @@ export class NostrService {
         ["status", "200"],
         ["result", "value", String(result)],
       ];
-      const resp = await signEvent({ tags });
+      const resp = await signEvent(
+        { tags },
+        eventToProcess.id,
+        eventToProcess.kind === CONFIG.requestRumorKind,
+        callerPubkey
+      );
       await pool.publish(this.relays, resp);
     } catch (err: any) {
       console.error("handleRequestEvent error", err);
@@ -186,7 +238,12 @@ export class NostrService {
       ["status", String(status)],
       ["error", String(status), message],
     ];
-    const resp = await signEvent({ tags });
+    const resp = await signEvent(
+      { tags },
+      requestEvent.id,
+      requestEvent.kind === CONFIG.requestRumorKind,
+      requestEvent.pubkey
+    );
     pool.publish(this.relays, resp);
     console.log("PUBLISHED ERROR EVENT", resp);
   }

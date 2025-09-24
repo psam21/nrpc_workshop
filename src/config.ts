@@ -1,3 +1,5 @@
+import { GiftWrap } from "nostr-tools/lib/types/kinds";
+
 console.log("PROCESS ENV IS", process.env);
 
 export const CONFIG = {
@@ -8,6 +10,9 @@ export const CONFIG = {
     "wss://relay.snort.social",
   ],
   kindRequest: 22068,
+  giftWrapKind: 21169,
+  requestRumorKind: 68,
+  responseRumorKind: 69,
   kindResponse: 22069,
   httpPort: Number(process.env.PORT) || 3000,
 };
