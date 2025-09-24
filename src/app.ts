@@ -13,7 +13,6 @@ process.on("exit", (code) => {
   console.log("Process exiting with code:", code);
 });
 
-
 import "dotenv/config";
 
 import { CONFIG } from "./config.js";
@@ -40,5 +39,4 @@ async function main() {
 
 main().catch((err) => {
   console.error(err);
-  process.exit(1);
 });

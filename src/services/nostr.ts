@@ -8,7 +8,14 @@ Project layout remains the same (src/controllers, src/services, etc.)
 // ---------------------------
 import { Event, Filter, SimplePool } from "nostr-tools";
 import { CONFIG } from "../config.js";
-import { Methods, NRPCParams } from "../registry.js";
+import {
+  Methods,
+  MethodSpec,
+  MethodSpecError,
+  MethodSpecParam,
+  MethodSpecReturn,
+  NRPCParams,
+} from "../registry.js";
 import { signEvent, assertServerKeys } from "../utils.js";
 import WebSocket from "ws";
 
@@ -20,6 +27,7 @@ globalThis.WebSocket = WebSocket;
 export class NostrService {
   private subs: any[] = [];
   private relays: string[];
+  private heartbeatInterval: NodeJS.Timeout | null = null;
 
   constructor(relayUrls: string[]) {
     relayUrls.forEach((url) => pool.ensureRelay(url));
@@ -28,7 +36,29 @@ export class NostrService {
 
   async connect() {
     assertServerKeys();
+
     this.subscribeRequests();
+
+    // 🔁 Periodically refresh subscriptions
+    this.heartbeatInterval = setInterval(() => {
+      console.log("[NostrService] refreshing subscriptions...");
+      this.subscribeRequests();
+      this.logRelayStates();
+    }, 60_000); // every 60s
+  }
+
+  private async logRelayStates() {
+    for (const url of this.relays) {
+      const relay = await pool.ensureRelay(url);
+      console.log("[NostrService] relay state", url, relay.connected);
+    }
+  }
+
+  async disconnect() {
+    if (this.heartbeatInterval) clearInterval(this.heartbeatInterval);
+    this.subs.forEach((sub) => sub.close?.());
+    this.subs = [];
+    pool.close(this.relays);
   }
 
   private subscribeRequests() {
@@ -66,6 +96,47 @@ export class NostrService {
 
       const handler = Methods.get(method)!;
       const result = await handler(params, event, {});
+      if (Array.isArray(result) && result[0]?.name && result[0]?.handler) {
+        // Special case: this is getMethods (MethodSpec[])
+        const tags: string[][] = [
+          ["e", event.id],
+          ["p", event.pubkey],
+          ["status", "200"],
+        ];
+
+        for (const method of result) {
+          tags.push(["result", "method", method.name]);
+
+          method.params?.forEach((p: MethodSpecParam) =>
+            tags.push([
+              "result",
+              "param",
+              method.name,
+              p.name,
+              p.type,
+              p.required ? "required" : "optional",
+            ])
+          );
+
+          method.returns?.forEach((r: MethodSpecReturn) =>
+            tags.push(["result", "returns", method.name, r.name, r.type])
+          );
+
+          method.errors?.forEach((e: MethodSpecError) =>
+            tags.push([
+              "result",
+              "error",
+              method.name,
+              String(e.code),
+              e.message,
+            ])
+          );
+        }
+
+        const resp = await signEvent({ tags });
+        await pool.publish(this.relays, resp);
+        return;
+      }
 
       if (result === undefined) {
         const tags = [

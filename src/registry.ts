@@ -7,22 +7,42 @@ export type ControllerHandler = (
   ctx: { sendPartial?: (tags: string[][], content?: string) => Promise<void> }
 ) => Promise<any> | any;
 
-export class MethodRegistry {
-  private methods = new Map<string, ControllerHandler>();
+export type MethodSpecParam = {
+  name: string;
+  type: string;
+  required?: boolean;
+};
 
-  register(name: string, handler: ControllerHandler) {
-    if (this.methods.has(name))
-      throw new Error(`Method ${name} already registered`);
-    this.methods.set(name, handler);
+export type MethodSpecError = { code: number; message: string };
+export type MethodSpecReturn = { name: string; type: string };
+
+export type MethodSpec = {
+  name: string;
+  params?: MethodSpecParam[];
+  returns?: MethodSpecReturn[];
+  errors?: MethodSpecError[];
+  handler: ControllerHandler;
+};
+
+export class MethodRegistry {
+  private methods = new Map<string, MethodSpec>();
+
+  register(
+    name: string,
+    handler: MethodSpec["handler"],
+    spec?: Omit<MethodSpec, "name" | "handler">
+  ) {
+    this.methods.set(name, { name, handler, ...spec });
   }
-  has(name: string) {
+
+  has(name: string): boolean {
     return this.methods.has(name);
   }
-  get(name: string) {
-    return this.methods.get(name);
+  get(name: string): MethodSpec["handler"] | undefined {
+    return this.methods.get(name)?.handler;
   }
-  list() {
-    return Array.from(this.methods.keys());
+  list(): MethodSpec[] {
+    return [...this.methods.values()];
   }
 }
 
