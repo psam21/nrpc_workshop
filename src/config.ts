@@ -1,7 +1,3 @@
-import { GiftWrap } from "nostr-tools/lib/types/kinds";
-
-console.log("PROCESS ENV IS", process.env);
-
 export const CONFIG = {
   privKey: process.env.NSEC,
   pubKeyHex: process.env.PUBKEY || "",

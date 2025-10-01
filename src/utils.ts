@@ -23,6 +23,7 @@ export function assertServerKeys() {
     CONFIG.pubKeyHex = getPublicKey(
       nip19.decode(CONFIG.privKey).data as Uint8Array
     );
+  console.log("CONFIG IS", CONFIG);
 }
 
 function createWrap(
@@ -64,6 +65,7 @@ export async function signEvent(
   callerPubkey: string
 ): Promise<Event> {
   assertServerKeys();
+  console.log("ENCRYPTED EVENT", encrypted);
   const now = Math.floor(Date.now() / 1000);
   let e: any = {
     kind: encrypted ? CONFIG.responseRumorKind : CONFIG.kindResponse,

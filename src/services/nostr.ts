@@ -8,6 +8,7 @@ Project layout remains the same (src/controllers, src/services, etc.)
 // ---------------------------
 import {
   Event,
+  EventTemplate,
   Filter,
   nip19,
   nip44,
@@ -204,7 +205,7 @@ export class NostrService {
           eventToProcess.kind === CONFIG.requestRumorKind,
           callerPubkey
         );
-        await pool.publish(this.relays, resp);
+        pool.publish(this.relays, resp);
         return;
       }
 
@@ -223,15 +224,16 @@ export class NostrService {
       await pool.publish(this.relays, resp);
     } catch (err: any) {
       console.error("handleRequestEvent error", err);
-      this.publishError(event, 500, String(err?.message || err));
+      this.publishError(eventToProcess, 500, String(err?.message || err));
     }
   }
 
   private async publishError(
-    requestEvent: Event,
+    requestEvent: UnsignedEvent & { id: string },
     status: number,
     message: string
   ) {
+    console.log("GOT REQUEST EVENT AS", requestEvent);
     const tags = [
       ["e", requestEvent.id],
       ["p", requestEvent.pubkey],
