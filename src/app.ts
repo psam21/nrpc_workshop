@@ -22,6 +22,7 @@ import { NostrService } from "./services/nostr.js";
 import { assertServerKeys } from "./utils.js";
 import { DMController } from "./controllers/DMController.js";
 import { ErrorController } from "./controllers/ErrorController.js";
+import { GiveawayController } from "./controllers/GiveAwayController.js";
 
 async function main() {
   try {
@@ -34,6 +35,7 @@ async function main() {
   new ReminderController(Registry);
   new DMController(Registry);
   new ErrorController(Registry);
+  new GiveawayController(Registry, "https://forge.flashapp.me");
 
   const nostr = new NostrService(CONFIG.relays);
   await nostr.connect();

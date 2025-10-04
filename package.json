@@ -3,15 +3,19 @@
   "scripts": {
     "dev": "ts-node-esm src/app.ts",
     "build": "tsc",
-    "start": "node dist/app.js"
+    "start": "node dist/app.js",
+    "seed": "npm run build && node dist/scripts/seedWallet.js"
   },
   "dependencies": {
+    "@cashu/cashu-ts": "^2.5.3",
+    "better-sqlite3": "^12.4.1",
     "dotenv": "^17.2.2",
     "nostr-tools": "^2.16.2",
     "uuid": "^13.0.0",
     "ws": "^8.18.3"
   },
   "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^24.5.2",
     "@types/ws": "^8.18.1",
     "ts-node": "^10.9.2",
