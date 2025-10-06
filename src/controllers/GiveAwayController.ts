@@ -10,6 +10,7 @@ import {
   Proof,
 } from "@cashu/cashu-ts";
 import { ProofStore } from "../services/proofStore.js";
+import { sendDirectMessage } from "../services/sendDM.js";
 
 export class GiveawayController extends BaseController {
   private wallet: CashuWallet;
@@ -36,7 +37,7 @@ export class GiveawayController extends BaseController {
   }
 
   async giveaway(params: Record<string, any>, event: Event) {
-    const amount = 10;
+    const amount = 1;
     this.proofStore.init();
     this.proofs = this.proofStore.loadProofs();
     console.log("Proofs loaded are", this.proofs);
@@ -45,22 +46,23 @@ export class GiveawayController extends BaseController {
       err.status = 400;
       throw err;
     }
-
+    console.log("Sending", amount, "from", this.proofs);
     const { send, keep } = await this.wallet.send(amount, this.proofs);
-
+    console.log("Send", send, "keep", keep);
     if (send.length === 0) {
       const err: any = new Error("Insufficient funds");
       err.status = 400;
       throw err;
     }
-
+    console.log("Send", send, "keep", keep);
     // Update wallet state
     this.proofs = [...keep];
-    await this.proofStore.deleteProofs(send, "https://forge.flashapp.me");
-    await this.proofStore.saveProofs(this.proofs, "https://forge.flashapp.me");
+    this.proofStore.deleteProofs(send, this.mintUrl);
+    this.proofStore.saveProofs(this.proofs, this.mintUrl);
 
     const giveawayToken = getEncodedToken({ mint: this.mintUrl, proofs: send });
-
+    const GiveAwayMessage = `Thank you for participating, here is a small gift from formstr ${giveawayToken}`;
+    await sendDirectMessage(event.pubkey, GiveAwayMessage);
     console.log(
       `[GiveawayController] Gave away ${amount} sats to ${event.pubkey}`
     );

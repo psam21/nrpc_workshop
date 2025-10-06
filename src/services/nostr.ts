@@ -18,7 +18,6 @@ import {
 import { CONFIG } from "../config.js";
 import {
   Methods,
-  MethodSpec,
   MethodSpecError,
   MethodSpecParam,
   MethodSpecReturn,
@@ -50,7 +49,7 @@ export class NostrService {
       console.log("[NostrService] refreshing subscriptions...");
       this.subscribeRequests();
       this.logRelayStates();
-    }, 300_000); // every 60s
+    }, 500 * 1000);
   }
 
   private async logRelayStates() {
@@ -62,7 +61,7 @@ export class NostrService {
 
   async disconnect() {
     if (this.heartbeatInterval) clearInterval(this.heartbeatInterval);
-    this.subs.forEach((sub) => sub.close?.());
+    this.subs.forEach((sub) => sub.close());
     this.subs = [];
     pool.close(this.relays);
   }
@@ -77,6 +76,7 @@ export class NostrService {
       onevent: (event: Event) => this.handleRequestEvent(event),
       oneose: () => {
         /* End of stored events */
+        console.log("Received eose from a relay");
       },
     });
 
@@ -95,7 +95,6 @@ export class NostrService {
   }
 
   private async handleRequestEvent(event: Event) {
-    console.log("GOT REQUEST EVENT", JSON.stringify(event));
     let eventToProcess: (UnsignedEvent & { id: string }) | Event;
     let callerPubkey: string;
     if (event.kind === 22068) {
@@ -172,7 +171,7 @@ export class NostrService {
           callerPubkey
         );
         console.log("RESPONDING WITH RESP", JSON.stringify(resp));
-        await pool.publish(this.relays, resp);
+        pool.publish(this.relays, resp);
         return;
       }
 
@@ -221,10 +220,12 @@ export class NostrService {
         eventToProcess.kind === CONFIG.requestRumorKind,
         callerPubkey
       );
-      await pool.publish(this.relays, resp);
+      pool.publish(this.relays, resp);
+      return;
     } catch (err: any) {
       console.error("handleRequestEvent error", err);
       this.publishError(eventToProcess, 500, String(err?.message || err));
+      return;
     }
   }
 

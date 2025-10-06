@@ -35,7 +35,9 @@ async function main() {
   new ReminderController(Registry);
   new DMController(Registry);
   new ErrorController(Registry);
-  new GiveawayController(Registry, "https://forge.flashapp.me");
+  if (CONFIG.mintUrl) {
+    new GiveawayController(Registry, CONFIG.mintUrl);
+  }
 
   const nostr = new NostrService(CONFIG.relays);
   await nostr.connect();
