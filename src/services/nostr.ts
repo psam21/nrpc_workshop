@@ -23,7 +23,7 @@ import {
   MethodSpecReturn,
   NRPCParams,
 } from "../registry.js";
-import { signEvent, assertServerKeys } from "../utils.js";
+import { signEvent } from "../utils.js";
 import WebSocket from "ws";
 
 export const pool = new SimplePool();
@@ -42,7 +42,7 @@ export class NostrService {
   }
 
   async connect() {
-    this.subscribeRequests();
+    await this.subscribeRequests();
 
     // 🔁 Periodically refresh subscriptions
     this.heartbeatInterval = setInterval(() => {
@@ -66,11 +66,12 @@ export class NostrService {
     pool.close(this.relays);
   }
 
-  private subscribeRequests() {
+  private async subscribeRequests() {
     const filter: Filter = {
       kinds: [CONFIG.kindRequest, CONFIG.giftWrapKind],
       "#p": [CONFIG.pubKeyHex],
     };
+    await this.disconnect();
 
     const sub = pool.subscribeMany(this.relays, [filter], {
       onevent: (event: Event) => this.handleRequestEvent(event),
@@ -81,6 +82,7 @@ export class NostrService {
     });
 
     this.subs.push(sub);
+    console.log("Total subs at this point:", JSON.stringify(this.subs));
   }
 
   private getRumorFromWrap(wrap: Event) {

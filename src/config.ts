@@ -11,4 +11,5 @@ export const CONFIG = {
   responseRumorKind: 69,
   kindResponse: 22069,
   httpPort: Number(process.env.PORT) || 3000,
+  mintUrl: process.env.MINT_URL,
 };
