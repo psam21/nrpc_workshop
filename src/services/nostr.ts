@@ -119,9 +119,8 @@ export class NostrService {
       if (!methodTag)
         return this.publishError(event, 400, "missing method tag");
       const method = methodTag[1];
-
       const params: NRPCParams = {};
-      for (const t of event.tags)
+      for (const t of eventToProcess.tags)
         if (t[0] === "param") params[t[1]] = t[2] ?? "";
 
       if (!Methods.has(method))

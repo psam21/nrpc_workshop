@@ -2,7 +2,8 @@
 import { NRPCParams, MethodRegistry } from "../registry.js";
 import { BaseController } from "./BaseController.js";
 import { Event } from "nostr-tools";
-import { generateId } from "../utils.js";
+import { ReminderService } from "../services/ReminderService.js";
+import { SchedulerService } from "../services/SchedulerService.js";
 
 export class ReminderController extends BaseController {
   constructor(registry: MethodRegistry) {
@@ -24,22 +25,31 @@ export class ReminderController extends BaseController {
     });
 
     registry.register("getMethods", this.getMethods.bind(this));
+    SchedulerService.restore();
   }
 
   async createReminder(params: NRPCParams, event: Event) {
-    console.log("I GOT CALLED", params, params.Time, params.Text);
+    console.log(
+      "Time",
+      "Text",
+      "Date",
+      params.Time,
+      params.Text,
+      params.Date,
+      JSON.stringify(params)
+    );
     if (!params.Time || !params.Text || !params.Date) {
       const err: any = new Error("time and text required");
       err.status = 400;
       throw err;
     }
-    const reminderId = generateId(6);
-    return {
-      reminder_id: reminderId,
-      scheduled_at: params.time,
-      text: params.text,
-      owner: event.pubkey,
-    };
+    const result: any = ReminderService.create(
+      params.Time,
+      params.Text,
+      params.Date,
+      event.pubkey
+    );
+    result.message = "Message is now scheduled";
   }
 
   async getMethods() {
