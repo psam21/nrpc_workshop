@@ -37,5 +37,4 @@ coverage/
 .nyc_output/
 ws
 *.db
-*.db-shm
-*.db-wal
+*.db-*
