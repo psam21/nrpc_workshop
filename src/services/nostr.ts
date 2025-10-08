@@ -73,7 +73,7 @@ export class NostrService {
     };
     await this.disconnect();
 
-    const sub = pool.subscribeMany(this.relays, [filter], {
+    const sub = pool.subscribeMany(this.relays, filter, {
       onevent: (event: Event) => this.handleRequestEvent(event),
       oneose: () => {
         /* End of stored events */

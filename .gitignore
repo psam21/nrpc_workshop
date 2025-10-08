@@ -38,3 +38,4 @@ coverage/
 ws
 *.db
 *.db-*
+*.pid
