@@ -50,6 +50,7 @@ import { assertServerKeys } from "./utils.js";
 import { DMController } from "./controllers/DMController.js";
 import { ErrorController } from "./controllers/ErrorController.js";
 import { GiveawayController } from "./controllers/GiveAwayController.js";
+import { SchedulePostController } from "./controllers/SchedulePostController.js";
 
 async function main() {
   try {
@@ -65,6 +66,7 @@ async function main() {
   if (CONFIG.mintUrl) {
     new GiveawayController(Registry, CONFIG.mintUrl);
   }
+  new SchedulePostController(Registry)
 
   const nostr = new NostrService(CONFIG.relays);
   await nostr.connect();

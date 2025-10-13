@@ -63,7 +63,6 @@ export class NostrService {
     if (this.heartbeatInterval) clearInterval(this.heartbeatInterval);
     this.subs.forEach((sub) => sub.close());
     this.subs = [];
-    pool.close(this.relays);
   }
 
   private async subscribeRequests() {
@@ -122,10 +121,9 @@ export class NostrService {
       const params: NRPCParams = {};
       for (const t of eventToProcess.tags)
         if (t[0] === "param") params[t[1]] = t[2] ?? "";
-
+      console.log("METHODS ARE", Methods)
       if (!Methods.has(method))
         return this.publishError(event, 404, `method ${method} not found`);
-
       const handler = Methods.get(method)!;
       const result = await handler(params, eventToProcess as Event, {});
       if (Array.isArray(result) && result[0]?.name && result[0]?.handler) {

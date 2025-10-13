@@ -28,7 +28,7 @@ export class ReminderService {
       scheduled_at: scheduledAt,
     };
     ReminderDB.insert(reminder);
-    SchedulerService.schedule(reminder);
+    SchedulerService.schedule({ id: reminderId, type: "reminder", payload: reminder, scheduled_at: scheduledAt });
 
     return {
       reminder_id: reminderId,

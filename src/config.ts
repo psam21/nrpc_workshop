@@ -4,6 +4,8 @@ export const CONFIG = {
   relays: (process.env.RELAYS && process.env.RELAYS.split(",")) || [
     "wss://relay.damus.io",
     "wss://relay.snort.social",
+    "wss://relay.primal.net",
+    "wss://relay.nostr.band"
   ],
   kindRequest: 22068,
   giftWrapKind: 21169,
