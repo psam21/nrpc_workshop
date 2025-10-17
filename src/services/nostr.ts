@@ -1,14 +1,9 @@
-/*
-Updated NostrService using nostr-tools SimplePool (modern API)
-Project layout remains the same (src/controllers, src/services, etc.)
-*/
+import WebSocket from "ws";
+// @ts-ignore
+globalThis.WebSocket = WebSocket;
 
-// ---------------------------
-// src/services/nostr.ts
-// ---------------------------
 import {
   Event,
-  EventTemplate,
   Filter,
   nip19,
   nip44,
@@ -24,12 +19,9 @@ import {
   NRPCParams,
 } from "../registry.js";
 import { signEvent } from "../utils.js";
-import WebSocket from "ws";
+
 
 export const pool = new SimplePool();
-
-// @ts-ignore
-globalThis.WebSocket = WebSocket;
 
 export class NostrService {
   private subs: any[] = [];
@@ -37,19 +29,41 @@ export class NostrService {
   private heartbeatInterval: NodeJS.Timeout | null = null;
 
   constructor(relayUrls: string[]) {
-    relayUrls.forEach((url) => pool.ensureRelay(url));
     this.relays = relayUrls;
   }
 
+  private async initRelays() {
+    await Promise.all(this.relays.map((url) => pool.ensureRelay(url)));
+  }
   async connect() {
+    await this.initRelays();
     await this.subscribeRequests();
 
     // 🔁 Periodically refresh subscriptions
-    this.heartbeatInterval = setInterval(() => {
-      console.log("[NostrService] refreshing subscriptions...");
-      this.subscribeRequests();
-      this.logRelayStates();
+    if (this.heartbeatInterval) clearInterval(this.heartbeatInterval);
+    this.heartbeatInterval = setInterval(async () => {
+      try {
+        console.log("[NostrService] heartbeat — refreshing subscriptions");
+        await this.subscribeRequests();
+        await this.logRelayStates();
+      } catch (err) {
+        console.error("[NostrService] heartbeat error", err);
+      }
     }, 500 * 1000);
+  }
+
+  private async closeSubscriptions() {
+    if (!this.subs?.length) return;
+    await Promise.all(
+      this.subs.map(async (s) => {
+        try {
+          s.close();
+        } catch (err) {
+          console.warn("[NostrService] error closing sub", err);
+        }
+      })
+    );
+    this.subs = [];
   }
 
   private async logRelayStates() {
@@ -60,17 +74,20 @@ export class NostrService {
   }
 
   async disconnect() {
-    if (this.heartbeatInterval) clearInterval(this.heartbeatInterval);
-    this.subs.forEach((sub) => sub.close());
-    this.subs = [];
+    if (this.heartbeatInterval) {
+      clearInterval(this.heartbeatInterval);
+      this.heartbeatInterval = null;
+    }
+    await this.closeSubscriptions();
   }
+
 
   private async subscribeRequests() {
     const filter: Filter = {
       kinds: [CONFIG.kindRequest, CONFIG.giftWrapKind],
       "#p": [CONFIG.pubKeyHex],
     };
-    await this.disconnect();
+    await this.closeSubscriptions();
 
     const sub = pool.subscribeMany(this.relays, filter, {
       onevent: (event: Event) => this.handleRequestEvent(event),

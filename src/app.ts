@@ -70,8 +70,12 @@ async function main() {
 
   const nostr = new NostrService(CONFIG.relays);
   await nostr.connect();
+  console.log("NRPC server started and connected to relays.");
+
+  // 👇 Keep process alive indefinitely
+  setInterval(() => { }, 1 << 30);
 }
 
 main().catch((err) => {
-  console.error(err);
+  console.log("Caught an error",err);
 });

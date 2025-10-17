@@ -50,9 +50,18 @@ export class SchedulerService {
           }
 
           case "post": {
-            const event: Event = job.payload;
-            console.log(`[Scheduler] Publishing scheduled post for ${JSON.stringify(event)}`)
-            pool.publish(CONFIG.relays, event)
+            const event = job.payload;
+            console.log(`[Scheduler] Publishing Nostr event ${event.id} at scheduled time`);
+
+            try {
+              const results = pool.publish(CONFIG.relays, event); // array of promises
+              await Promise.allSettled(results); // ✅ wait for all relays to respond
+
+              console.log(`[Scheduler] Event ${event.id} published (or attempted) on all relays`);
+            } catch (err: any) {
+              console.error(`[Scheduler] Unexpected error publishing ${event.id}:`, err);
+            }
+
             break;
           }
 
