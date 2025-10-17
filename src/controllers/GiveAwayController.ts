@@ -3,35 +3,66 @@ import { BaseController } from "./BaseController.js";
 import { MethodRegistry } from "../registry.js";
 import { Event } from "nostr-tools";
 import { GiveawayWalletService } from "../services/GiveAwayWalletService.js";
+import { ClaimStore } from "../services/claimStore.js";
 import { sendDirectMessage } from "../services/sendDM.js";
 
 export class GiveawayController extends BaseController {
   private walletService: GiveawayWalletService;
+  private claimStore: ClaimStore;
 
   constructor(registry: MethodRegistry, mintUrl: string) {
     super(registry);
+
     this.walletService = new GiveawayWalletService(mintUrl);
+    this.claimStore = new ClaimStore();
 
-    registry.register("giveaway", this.giveaway.bind(this), {
-      params: [{ name: "amount", type: "number", required: false }],
-      returns: [{ name: "token", type: "string" }],
-      errors: [
-        { code: 400, message: "Insufficient funds" },
-        { code: 500, message: "Internal error" },
-      ],
-    });
-  }
+    registry.register(
+      "giveaway",
+      async (params: Record<string, any>, event: Event) => {
+        const nostrEvent = params["I want to receive ecash!"];
+        try {
+          const pubkey = JSON.parse(nostrEvent).pubkey
+          // Check if already claimed
+          if (this.claimStore.hasClaimed(pubkey)) {
+            await sendDirectMessage(pubkey, "Sorry, only 1 ecash token per pubkey");
+            console.log(`[GiveawayController] Pubkey ${pubkey} tried to claim again`);
+            return { message: "Already claimed", pubkey };
+          }
 
-  async giveaway(params: Record<string, any>, event: Event) {
-    const amount = Number(params.amount ?? 1);
+          // Send 1 sat token
+          const token = await this.walletService.sendGiveaway(1);
 
-    const giveawayToken = await this.walletService.sendGiveaway(amount);
+          // Mark as claimed
+          this.claimStore.markClaimed(pubkey);
 
-    const message = `🎁 Thank you for participating! Here's a ${amount} sat gift from formstr:\n\n${giveawayToken}`;
-    await sendDirectMessage(event.pubkey, message);
+          // Send DM
+          const message = `🎁 Thank you for participating! Here's a small gift: ${token}`;
+          await sendDirectMessage(pubkey, message);
 
-    console.log(`[GiveawayController] Gave away ${amount} sats to ${event.pubkey}`);
+          console.log(`[GiveawayController] Sent ecash to ${pubkey}`);
 
-    return { token: giveawayToken };
+          // 🔹 Log remaining server balance
+          const remainingBalance = this.walletService.getBalance();
+          console.log(`[GiveawayController] Remaining server balance: ${remainingBalance} sats`);
+
+          return { token, pubkey };
+        } catch (err: any) {
+          console.error("[GiveawayController] Error:", err);
+          throw err;
+        }
+      },
+      {
+        params: [{ name: "I want to receive ecash!", type: "string", required: true }],
+        returns: [
+          { name: "token", type: "string" },
+          { name: "pubkey", type: "string" },
+          { name: "message", type: "string" },
+        ],
+        errors: [
+          { code: 400, message: "Already claimed" },
+          { code: 500, message: "Internal error" },
+        ],
+      }
+    );
   }
 }

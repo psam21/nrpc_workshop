@@ -35,15 +35,18 @@ export class GiveawayWalletService {
         if (this.proofs.length === 0 || this.getBalance() < amount) {
             throw Object.assign(new Error("Insufficient funds"), { status: 400 });
         }
+        const selectedProofs = this.wallet.selectProofsToSend(this.proofs, amount);
 
-        const { send, keep } = await this.wallet.send(amount, this.proofs);
+        const { send, keep } = await this.wallet.send(amount, selectedProofs.send);
 
         if (send.length === 0) {
             throw Object.assign(new Error("Insufficient funds"), { status: 400 });
         }
 
         // Update wallet state
-        this.proofStore.deleteProofs(send, this.mintUrl);
+        console.log("Deleting proofs:", send);
+        console.log("Keeping proofs:", keep);
+        this.proofStore.deleteProofs(selectedProofs.send, this.mintUrl);
         this.proofStore.saveProofs(keep, this.mintUrl);
         this.proofs = [...keep];
 
