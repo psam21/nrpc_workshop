@@ -5,7 +5,7 @@ export const CONFIG = {
     "wss://relay.damus.io",
     "wss://relay.snort.social",
     "wss://relay.primal.net",
-    "wss://relay.nostr.band"
+    "wss://relay.nostr.band",
   ],
   kindRequest: 22068,
   giftWrapKind: 21169,
@@ -14,4 +14,12 @@ export const CONFIG = {
   kindResponse: 22069,
   httpPort: Number(process.env.PORT) || 3000,
   mintUrl: process.env.MINT_URL,
+  serviceName: process.env.SERVICE_NAME || "NRPC Backend Service",
+  serviceAbout:
+    process.env.SERVICE_ABOUT || "Remote Procedure Call server over Nostr.",
+  servicePicture: process.env.SERVICE_PICTURE || "",
+  serviceBanner: "",
+  lud16: process.env.LUD16 || "",
+  website: process.env.WEBSITE || "",
+  nip05: process.env.NIP05 || "",
 };

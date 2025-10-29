@@ -5,6 +5,7 @@ globalThis.WebSocket = WebSocket;
 import {
   Event,
   Filter,
+  finalizeEvent,
   nip19,
   nip44,
   SimplePool,
@@ -19,7 +20,6 @@ import {
   NRPCParams,
 } from "../registry.js";
 import { signEvent } from "../utils.js";
-
 
 export const pool = new SimplePool();
 
@@ -38,6 +38,9 @@ export class NostrService {
   async connect() {
     await this.initRelays();
     await this.subscribeRequests();
+
+    // 💡 Publish Kind 0 metadata on startup
+    await this.publishProfileMetadata();
 
     // 🔁 Periodically refresh subscriptions
     if (this.heartbeatInterval) clearInterval(this.heartbeatInterval);
@@ -66,6 +69,44 @@ export class NostrService {
     this.subs = [];
   }
 
+  async publishProfileMetadata() {
+    console.log(
+      "[NostrService] Publishing Kind 0 metadata (NRPC advertisement)"
+    );
+
+    const npub = nip19.npubEncode(CONFIG.pubKeyHex);
+    const tags: string[][] = [["t", "nrpc_server"]];
+
+    // Optional extra advertising / service info
+    if (CONFIG.relays?.length) {
+      CONFIG.relays.forEach((r) => tags.push(["r", r]));
+    }
+
+    const content = JSON.stringify({
+      name: CONFIG.serviceName,
+      about: CONFIG.serviceAbout,
+      picture: CONFIG.servicePicture || "https://example.com/logo.png",
+      banner: CONFIG.serviceBanner || "https://example.com/banner.png",
+      lud16: CONFIG.lud16 || "", // optional lightning address
+      website: CONFIG.website || "",
+      nip05: CONFIG.nip05 || "",
+      tags, // optional: embed tags in content if you like
+    });
+
+    const event = await finalizeEvent(
+      {
+        kind: 0,
+        content,
+        tags,
+        created_at: Math.floor(Date.now() / 1000),
+      },
+      nip19.decode(CONFIG.privKey as string).data as Uint8Array
+    );
+
+    pool.publish(this.relays, event);
+    console.log(`[NostrService] Published metadata for ${npub}`);
+  }
+
   private async logRelayStates() {
     for (const url of this.relays) {
       const relay = await pool.ensureRelay(url);
@@ -80,7 +121,6 @@ export class NostrService {
     }
     await this.closeSubscriptions();
   }
-
 
   private async subscribeRequests() {
     const filter: Filter = {
@@ -138,7 +178,7 @@ export class NostrService {
       const params: NRPCParams = {};
       for (const t of eventToProcess.tags)
         if (t[0] === "param") params[t[1]] = t[2] ?? "";
-      console.log("METHODS ARE", Methods)
+      console.log("METHODS ARE", Methods);
       if (!Methods.has(method))
         return this.publishError(event, 404, `method ${method} not found`);
       const handler = Methods.get(method)!;
