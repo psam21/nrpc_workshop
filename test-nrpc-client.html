@@ -1,0 +1,546 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>NRPC Servers Dashboard</title>
+    <style>
+      body {
+        font-family: Inter, system-ui, Segoe UI, Roboto, "Helvetica Neue", Arial;
+        margin: 0;
+        padding: 20px;
+        background: #f7fafc;
+        color: #0f172a;
+      }
+      header {
+        display: flex;
+        gap: 12px;
+        align-items: center;
+        margin-bottom: 18px;
+      }
+      h1 {
+        margin: 0;
+        font-size: 20px;
+      }
+      input[type="text"] {
+        width: 520px;
+        padding: 8px;
+        border: 1px solid #d1d5db;
+        border-radius: 6px;
+      }
+      button {
+        padding: 8px 12px;
+        border-radius: 8px;
+        border: 0;
+        background: #0369a1;
+        color: white;
+        cursor: pointer;
+      }
+      button.secondary {
+        background: #334155;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 14px;
+      }
+      th,
+      td {
+        padding: 10px;
+        border-bottom: 1px solid #e6eef6;
+        text-align: left;
+      }
+      th {
+        background: #eef6fb;
+        font-weight: 600;
+      }
+      .mono {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, "Roboto Mono",
+          monospace;
+        font-size: 12px;
+      }
+      .small {
+        font-size: 13px;
+        color: #334155;
+      }
+      .status-active {
+        color: #065f46;
+        font-weight: 700;
+      }
+      .status-inactive {
+        color: #991b1b;
+        font-weight: 700;
+      }
+      .methods {
+        font-size: 13px;
+        white-space: pre-wrap;
+        background: #fff;
+        padding: 8px;
+        border-radius: 6px;
+        border: 1px solid #e6eff6;
+      }
+      .spinner {
+        display: inline-block;
+        width: 14px;
+        height: 14px;
+        border: 2px solid #cbd5e1;
+        border-top-color: #0369a1;
+        border-radius: 50%;
+        animation: spin 0.9s linear infinite;
+        vertical-align: middle;
+        margin-right: 6px;
+      }
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+      footer {
+        margin-top: 18px;
+        color: #475569;
+        font-size: 13px;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div>
+        <h1>NRPC Servers Dashboard</h1>
+        <div class="small">
+          Discovers Kind 0 profiles tagged <code>["t","nrpc_server"]</code> and
+          performs runtime introspection (getMethods)
+        </div>
+      </div>
+    </header>
+
+    <div style="display: flex; gap: 10px; align-items: center">
+      <input
+        id="relaysInput"
+        type="text"
+        value="wss://relay.damus.io,wss://eden.nostr.land,wss://nostr-pub.wellorder.net,wss://relay.primal.net,wss://relay.nostr.band"
+      />
+      <button id="scanBtn">Scan relays</button>
+      <button id="refreshAllBtn" class="secondary">
+        Refresh methods for active
+      </button>
+      <label style="margin-left: auto" class="small"
+        >Timeout (ms):
+        <input
+          id="timeout"
+          type="number"
+          value="12000"
+          style="width: 88px; padding: 4px; margin-left: 6px"
+      /></label>
+    </div>
+
+    <table id="serversTable">
+      <thead>
+        <tr>
+          <th>NPUB / Profile</th>
+          <th>Tags & Relays</th>
+          <th>Introspection</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+
+    <footer>
+      Open-source viewer — ephemeral keys are generated in-browser for
+      introspection. If a relay requires authentication or blocks browser ws,
+      try other relays.
+    </footer>
+
+    <!-- nostr-tools via unpkg ES module -->
+    <script type="module">
+      import {
+        SimplePool,
+        nip19,
+        getPublicKey,
+        generateSecretKey,
+        finalizeEvent,
+        getEventHash,
+      } from "https://esm.sh/nostr-tools@2.12.0";
+      // ---------- Utility helpers ----------
+      const $ = (s) => document.querySelector(s);
+      const tbody = $("#serversTable tbody");
+      let pool = null;
+
+      function parseRelayList(text) {
+        return text
+          .split(",")
+          .map((s) => s.trim())
+          .filter(Boolean);
+      }
+
+      function npubFromHex(hex) {
+        try {
+          return nip19.npubEncode(hex);
+        } catch (e) {
+          return hex;
+        }
+      }
+
+      function makeRowId(pubkey) {
+        return "row-" + pubkey;
+      }
+
+      // ---------- Core operations ----------
+      async function ensurePool(relays) {
+        if (pool) {
+          // close previous subscriptions but keep pool
+          // we recreate pool each scan to be safe in browser env
+          try {
+            pool.close(relays);
+          } catch (_) {}
+        }
+        pool = new SimplePool();
+        // ensure relays opened (best-effort)
+        await Promise.all(
+          relays.map((r) => pool.ensureRelay(r).catch(() => null))
+        );
+        return pool;
+      }
+
+      // fetch Kind 0 profiles that advertise nrpc_server
+      async function discoverServers(relays) {
+        const p = await ensurePool(relays);
+        const filter = {
+          kinds: [0],
+          "#t": ["nrpc_server"],
+          limit: 500,
+        };
+        // subscribeMany returns a subscription; provide callbacks in options (nostr-tools SimplePool supports this)
+        return new Promise((resolve) => {
+          console.log("Searching on relays", relays);
+          const sub = p.subscribeMany(relays, [filter], {
+            onevent: (ev) => {
+              // collect events until EOSE; but EOSE might come independently. We'll accumulate then rely on timeout shorter than overall scan.
+            },
+            oneose: () => {
+              // on EOSE we need to fetch stored events. However subscribeMany does not return stored events directly.
+            },
+          });
+
+          // We'll instead use pool.list to fetch stored events (many relays)
+          p.querySync(relays, filter)
+            .then((events) => {
+              console.log("GOT EVENTS", events);
+              sub.close?.();
+              // dedupe by pubkey: keep latest (by created_at)
+              const byPub = {};
+              for (const ev of events) {
+                const existing = byPub[ev.pubkey];
+                if (
+                  !existing ||
+                  (ev.created_at || 0) > (existing.created_at || 0)
+                )
+                  byPub[ev.pubkey] = ev;
+              }
+              const unique = Object.values(byPub);
+              resolve(unique);
+            })
+            .catch((err) => {
+              sub.close?.();
+              console.error("discover error", err);
+              resolve([]);
+            });
+
+          // safety fallback: after 6s, if no result, try to resolve with whatever the pool returns
+          setTimeout(() => {
+            p.querySync(relays, [filter])
+              .then((events) => {
+                sub.close?.();
+                const byPub = {};
+                for (const ev of events) {
+                  const existing = byPub[ev.pubkey];
+                  if (
+                    !existing ||
+                    (ev.created_at || 0) > (existing.created_at || 0)
+                  )
+                    byPub[ev.pubkey] = ev;
+                }
+                resolve(Object.values(byPub));
+              })
+              .catch(() => resolve([]));
+          }, 6000);
+        });
+      }
+
+      // publish kind 22068 request (getMethods) with ephemeral key and wait for corresponding 22069
+      async function introspectServer(relays, targetPubkey, timeoutMs = 12000) {
+        const p = pool || (await ensurePool(relays));
+        const priv = generateSecretKey();
+        const pub = getPublicKey(priv);
+
+        // Build unsigned event
+        const unsigned = {
+          kind: 22068,
+          created_at: Math.floor(Date.now() / 1000),
+          tags: [
+            ["p", targetPubkey],
+            ["method", "getMethods"],
+          ],
+          content: "",
+          pubkey: pub,
+        };
+        const signed = await finalizeEvent(unsigned, priv);
+
+        // publish
+        try {
+          p.publish(relays, signed);
+        } catch (e) {
+          console.warn("publish failed:", e);
+        }
+
+        // listen for 22069 events referencing our request id (tag "e")
+        const filter = {
+          kinds: [22069],
+          "#e": [signed.id],
+          limit: 1,
+        };
+
+        return new Promise((resolve) => {
+          let resolved = false;
+          const sub = p.subscribeMany(relays, [filter], {
+            onevent: (ev) => {
+              if (resolved) return;
+              resolved = true;
+              sub.close?.();
+              resolve({ ok: true, event: ev });
+            },
+            oneose: () => {
+              /* eose */
+            },
+          });
+
+          // fallback timeout
+          const to = setTimeout(async () => {
+            if (resolved) return;
+            resolved = true;
+            try {
+              sub.close?.();
+            } catch (_) {}
+            resolve({ ok: false, reason: "timeout" });
+          }, timeoutMs);
+
+          // if any error on relays show later
+        });
+      }
+
+      // Render helper
+      function renderServers(servers) {
+        tbody.innerHTML = "";
+        if (!servers.length) {
+          tbody.innerHTML =
+            '<tr><td colspan="3" class="small">No NRPC servers discovered on configured relays.</td></tr>';
+          return;
+        }
+        for (const ev of servers) {
+          const pub = ev.pubkey;
+          const rowId = makeRowId(pub);
+          const npub = npubFromHex(pub);
+          const content = safeJsonParse(ev.content) || {};
+          const name =
+            content.name || content.displayName || content.username || "—";
+          const about = content.about || "";
+          const picture = content.picture || "";
+          const banner = content.banner || "";
+          const tagsList = (ev.tags || [])
+            .map((t) => JSON.stringify(t))
+            .join(", ");
+          const relaysTag = (ev.tags || [])
+            .filter((t) => t[0] === "r")
+            .map((t) => t[1])
+            .join(", ");
+
+          const tr = document.createElement("tr");
+          tr.id = rowId;
+          tr.innerHTML = `
+          <td style="min-width:320px">
+            <div class="mono">${npub}</div>
+            <div style="margin-top:6px"><strong>${escapeHtml(
+              name
+            )}</strong></div>
+            <div class="small">${escapeHtml(about)}</div>
+          </td>
+          <td>
+            <div class="small">relays: <span class="mono">${escapeHtml(
+              relaysTag || "—"
+            )}</span></div>
+            <div style="margin-top:6px" class="small">tags: <span class="mono">${escapeHtml(
+              tagsList || "—"
+            )}</span></div>
+            ${
+              picture
+                ? `<div style="margin-top:6px"><img src="${escapeHtml(
+                    picture
+                  )}" alt="pic" style="height:40px;border-radius:6px"></div>`
+                : ""
+            }
+            ${
+              banner
+                ? `<div style="margin-top:6px"><img src="${escapeHtml(
+                    banner
+                  )}" alt="banner" style="height:40px;border-radius:6px"></div>`
+                : ""
+            }
+          </td>
+          <td id="${rowId}-methods">
+            <div class="small">Status: <span class="small">Unknown</span></div>
+          </td>
+          <td>
+            <button data-pub="${pub}" class="checkBtn">Check methods</button>
+            <button data-pub="${pub}" class="copyBtn secondary">Copy npub</button>
+          </td>
+        `;
+          tbody.appendChild(tr);
+        }
+
+        // attach actions
+        document.querySelectorAll(".checkBtn").forEach((btn) => {
+          btn.onclick = async (e) => {
+            const pub = btn.dataset.pub;
+            updateStatusRow(pub, "checking");
+            const timeoutMs = Number($("#timeout").value) || 12000;
+            const result = await introspectServer(
+              parseRelayList($("#relaysInput").value),
+              pub,
+              timeoutMs
+            );
+            if (result.ok) {
+              const ev = result.event;
+              // parse tags
+              const statusTag = (ev.tags || []).find((t) => t[0] === "status");
+              const status = statusTag ? statusTag[1] : "unknown";
+              const results = (ev.tags || []).filter(
+                (t) =>
+                  t[0] === "result" ||
+                  t[0] === "result_json" ||
+                  t[0] === "error"
+              );
+              let methodsText = "";
+              // if result_json tag present parse it
+              const resultJsonTag = (ev.tags || []).find(
+                (t) => t[0] === "result_json"
+              );
+              if (resultJsonTag) {
+                try {
+                  const parsed = JSON.parse(resultJsonTag[1]);
+                  methodsText = JSON.stringify(parsed, null, 2);
+                } catch (_) {
+                  methodsText = resultJsonTag[1];
+                }
+              } else {
+                // inspect 'result' tags — concatenate
+                const grouped = results
+                  .map((r) => JSON.stringify(r))
+                  .join("\n");
+                methodsText = grouped || ev.content || "";
+              }
+              updateStatusRow(
+                pub,
+                status === "200" ? "active" : "inactive",
+                methodsText,
+                ev
+              );
+            } else {
+              updateStatusRow(
+                pub,
+                "inactive",
+                `No response (${result.reason || "timeout"})`
+              );
+            }
+          };
+        });
+
+        document.querySelectorAll(".copyBtn").forEach((btn) => {
+          btn.onclick = (e) => {
+            const pub = btn.dataset.pub;
+            const npub = npubFromHex(pub);
+            navigator.clipboard
+              ?.writeText(npub)
+              .then(() => alert("Copied npub to clipboard"));
+          };
+        });
+      }
+
+      function updateStatusRow(pub, state, methodsText = "", ev = null) {
+        const cell = document.getElementById(makeRowId(pub) + "-methods");
+        if (!cell) return;
+        let html = "";
+        if (state === "checking") {
+          html = `<div><span class="spinner"></span> Checking...</div>`;
+        } else if (state === "active") {
+          html = `<div>Status: <span class="status-active">Active</span></div>`;
+          html += `<div style="margin-top:8px"><div class="small">Methods / Response:</div><pre class="methods">${escapeHtml(
+            methodsText || (ev && ev.content) || "—"
+          )}</pre></div>`;
+        } else {
+          html = `<div>Status: <span class="status-inactive">Inactive</span></div>`;
+          html += `<div style="margin-top:8px" class="small">${escapeHtml(
+            methodsText || ""
+          )}</div>`;
+        }
+        cell.innerHTML = html;
+      }
+
+      function escapeHtml(s) {
+        if (!s && s !== 0) return "";
+        return String(s)
+          .replaceAll("&", "&amp;")
+          .replaceAll("<", "&lt;")
+          .replaceAll(">", "&gt;")
+          .replaceAll('"', "&quot;")
+          .replaceAll("'", "&#39;");
+      }
+
+      function safeJsonParse(s) {
+        try {
+          return JSON.parse(s);
+        } catch (e) {
+          return null;
+        }
+      }
+
+      // ---------- UI wiring ----------
+      $("#scanBtn").onclick = async () => {
+        $("#scanBtn").disabled = true;
+        $("#scanBtn").textContent = "Scanning…";
+        const relays = parseRelayList($("#relaysInput").value);
+        try {
+          const servers = await discoverServers(relays);
+          // sort by created_at desc
+          servers.sort((a, b) => (b.created_at || 0) - (a.created_at || 0));
+          renderServers(servers);
+        } catch (err) {
+          console.error(err);
+          tbody.innerHTML =
+            '<tr><td colspan="3">Error during discovery (see console)</td></tr>';
+        } finally {
+          $("#scanBtn").disabled = false;
+          $("#scanBtn").textContent = "Scan relays";
+        }
+      };
+
+      $("#refreshAllBtn").onclick = async () => {
+        const relays = parseRelayList($("#relaysInput").value);
+        const rows = Array.from(tbody.querySelectorAll("tr"))
+          .map((tr) => {
+            const pub = tr.querySelector(".checkBtn")?.dataset?.pub;
+            return pub;
+          })
+          .filter(Boolean);
+        for (const pub of rows) {
+          // trigger check sequentially to avoid flooding
+          const btn = tbody.querySelector(`button.checkBtn[data-pub="${pub}"]`);
+          if (btn) btn.click();
+          await new Promise((r) => setTimeout(r, 400)); // small delay
+        }
+      };
+
+      // initial auto-scan
+      setTimeout(() => $("#scanBtn").click(), 300);
+    </script>
+  </body>
+</html>

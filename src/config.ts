@@ -18,7 +18,7 @@ export const CONFIG = {
   serviceAbout:
     process.env.SERVICE_ABOUT || "Remote Procedure Call server over Nostr.",
   servicePicture: process.env.SERVICE_PICTURE || "",
-  serviceBanner: "",
+  serviceBanner: process.env.SERVICE_BANNER || "",
   lud16: process.env.LUD16 || "",
   website: process.env.WEBSITE || "",
   nip05: process.env.NIP05 || "",
