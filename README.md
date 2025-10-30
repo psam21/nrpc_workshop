@@ -1,3 +1,27 @@
+#Installation
+
+```
+> npm install
+```
+
+Setup a sample .env:
+```
+export NSEC="<Insert NSEC here>"
+export SERVICE_NAME="FORMSTR NRPC BACKEND"
+export SERVICE_ABOUT="Example NRPC backend by FORMSTR"
+export SERVICE_PICTURE=""
+export SERVICE_BANNER=""
+```
+
+```
+source .env
+```
+
+start the app:
+```
+node dist/app.js
+```
+
 # Nostr RPC-over-Events
 
 ## Request Event (kind: 22068)
