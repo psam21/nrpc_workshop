@@ -48,6 +48,7 @@ import { ReminderController } from "./controllers/ReminderController.js";
 import { NostrService } from "./services/nostr.js";
 import { assertServerKeys } from "./utils.js";
 import { DMController } from "./controllers/DMController.js";
+import { SDMController } from "./controllers/SDMController.js";
 import { ErrorController } from "./controllers/ErrorController.js";
 import { GiveawayController } from "./controllers/GiveAwayController.js";
 import { SchedulePostController } from "./controllers/SchedulePostController.js";
@@ -62,6 +63,7 @@ async function main() {
 
   new ReminderController(Registry);
   new DMController(Registry);
+  new SDMController(Registry);
   new ErrorController(Registry);
   if (CONFIG.mintUrl) {
     new GiveawayController(Registry, CONFIG.mintUrl);

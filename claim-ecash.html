@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Claim Ecash from NRPC Giveaway</title>
+    <style>
+      body {
+        font-family: Inter, system-ui, Segoe UI, Roboto, "Helvetica Neue", Arial;
+        margin: 0;
+        padding: 20px;
+        background: #f7fafc;
+        color: #0f172a;
+        max-width: 900px;
+        margin: 0 auto;
+      }
+      h1 {
+        margin: 0 0 10px 0;
+        font-size: 24px;
+      }
+      .card {
+        background: white;
+        border-radius: 8px;
+        padding: 20px;
+        margin: 20px 0;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+      }
+      label {
+        display: block;
+        margin: 12px 0 6px 0;
+        font-weight: 600;
+        font-size: 14px;
+      }
+      input[type="text"],
+      textarea,
+      select {
+        width: 100%;
+        padding: 10px;
+        border: 1px solid #d1d5db;
+        border-radius: 6px;
+        font-size: 14px;
+        box-sizing: border-box;
+      }
+      textarea {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, monospace;
+        min-height: 80px;
+      }
+      button {
+        padding: 12px 20px;
+        border-radius: 8px;
+        border: 0;
+        background: #0369a1;
+        color: white;
+        cursor: pointer;
+        font-size: 14px;
+        font-weight: 600;
+        margin-top: 12px;
+      }
+      button:hover {
+        background: #075985;
+      }
+      button:disabled {
+        background: #cbd5e1;
+        cursor: not-allowed;
+      }
+      .success {
+        background: #d1fae5;
+        border: 1px solid #6ee7b7;
+        color: #065f46;
+        padding: 12px;
+        border-radius: 6px;
+        margin: 12px 0;
+      }
+      .error {
+        background: #fee2e2;
+        border: 1px solid #fca5a5;
+        color: #991b1b;
+        padding: 12px;
+        border-radius: 6px;
+        margin: 12px 0;
+      }
+      .info {
+        background: #dbeafe;
+        border: 1px solid #93c5fd;
+        color: #1e40af;
+        padding: 12px;
+        border-radius: 6px;
+        margin: 12px 0;
+        font-size: 13px;
+      }
+      .mono {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, monospace;
+        font-size: 12px;
+        background: #f1f5f9;
+        padding: 2px 6px;
+        border-radius: 3px;
+      }
+      .spinner {
+        display: inline-block;
+        width: 14px;
+        height: 14px;
+        border: 2px solid #cbd5e1;
+        border-top-color: #0369a1;
+        border-radius: 50%;
+        animation: spin 0.9s linear infinite;
+        vertical-align: middle;
+        margin-right: 6px;
+      }
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+      pre {
+        background: #1e293b;
+        color: #e2e8f0;
+        padding: 12px;
+        border-radius: 6px;
+        overflow-x: auto;
+        font-size: 12px;
+      }
+      .token-display {
+        word-break: break-all;
+        margin-top: 8px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>🎁 Claim Ecash from NRPC Giveaway</h1>
+    <p style="color: #64748b; margin-top: 0">
+      Claim free ecash tokens from NRPC servers offering giveaways
+    </p>
+
+    <div class="card">
+      <h2 style="margin-top: 0; font-size: 18px">Configuration</h2>
+
+      <label for="serverNpub">Server NPUB (to claim from):</label>
+      <select id="serverNpub">
+        <option value="npub1svldf03s8g4gsdc6lju4qu9u7wc9sqegzhk3axecpntfdgz50yzqvhde75">
+          npub1svldf03s8g4gsdc6lju4qu9u7wc9sqegzhk3axecpntfdgz50yzqvhde75
+        </option>
+        <option value="npub1awsxkhcll3fdjtmmjes0mwj30upsunnn7688n92w557dse06fuwsajfqau">
+          npub1awsxkhcll3fdjtmmjes0mwj30upsunnn7688n92w557dse06fuwsajfqau
+        </option>
+        <option value="">Custom (enter below)</option>
+      </select>
+
+      <label for="customNpub">Custom Server NPUB (if selected above):</label>
+      <input
+        id="customNpub"
+        type="text"
+        placeholder="npub1..."
+        disabled
+      />
+
+      <label for="relays">Relays (comma-separated):</label>
+      <textarea id="relays">wss://relay.damus.io,wss://relay.snort.social,wss://relay.primal.net,wss://relay.nostr.band,wss://nostr-pub.wellorder.net</textarea>
+
+      <label for="yourNsec">Your NSEC (private key to claim with):</label>
+      <input
+        id="yourNsec"
+        type="text"
+        placeholder="nsec1..."
+      />
+
+      <div class="info">
+        💡 <strong>Tip:</strong> Your NSEC is used to sign the giveaway request and receive the DM with the ecash token. It's processed only in your browser and never sent anywhere except to sign Nostr events locally.
+      </div>
+
+      <button id="claimBtn">🎁 Claim Ecash</button>
+
+      <div id="status"></div>
+      <div id="result"></div>
+    </div>
+
+    <div class="card">
+      <h2 style="margin-top: 0; font-size: 18px">How it works</h2>
+      <ol style="font-size: 14px; color: #475569">
+        <li>Select a server offering ecash giveaways</li>
+        <li>Enter your NSEC (used to sign the request)</li>
+        <li>Click "Claim Ecash" to send an NRPC request</li>
+        <li>Wait for the server to respond with an ecash token</li>
+        <li>The server will also send you a DM with the token</li>
+      </ol>
+    </div>
+
+    <script type="module">
+      import {
+        SimplePool,
+        nip19,
+        getPublicKey,
+        finalizeEvent,
+      } from "https://esm.sh/nostr-tools@2.12.0";
+
+      const $ = (s) => document.querySelector(s);
+      let pool = null;
+
+      // Handle custom npub toggle
+      $("#serverNpub").onchange = () => {
+        const custom = $("#customNpub");
+        if ($("#serverNpub").value === "") {
+          custom.disabled = false;
+          custom.focus();
+        } else {
+          custom.disabled = true;
+          custom.value = "";
+        }
+      };
+
+      $("#claimBtn").onclick = async () => {
+        const statusDiv = $("#status");
+        const resultDiv = $("#result");
+        statusDiv.innerHTML = "";
+        resultDiv.innerHTML = "";
+
+        // Get configuration
+        const serverNpubSelect = $("#serverNpub").value;
+        const serverNpub = serverNpubSelect || $("#customNpub").value.trim();
+        const relaysText = $("#relays").value;
+        const yourNsec = $("#yourNsec").value.trim();
+
+        // Validation
+        if (!serverNpub) {
+          statusDiv.innerHTML = '<div class="error">❌ Please select or enter a server NPUB</div>';
+          return;
+        }
+        if (!yourNsec.startsWith("nsec1")) {
+          statusDiv.innerHTML = '<div class="error">❌ Please enter a valid NSEC (should start with nsec1)</div>';
+          return;
+        }
+
+        const relays = relaysText
+          .split(",")
+          .map((s) => s.trim())
+          .filter(Boolean);
+
+        if (!relays.length) {
+          statusDiv.innerHTML = '<div class="error">❌ Please enter at least one relay</div>';
+          return;
+        }
+
+        // Decode keys
+        let serverPubkey, yourPrivkey, yourPubkey;
+        try {
+          const decoded = nip19.decode(serverNpub);
+          serverPubkey = decoded.data;
+        } catch (e) {
+          statusDiv.innerHTML = '<div class="error">❌ Invalid server NPUB: ' + e.message + '</div>';
+          return;
+        }
+
+        try {
+          const decoded = nip19.decode(yourNsec);
+          yourPrivkey = decoded.data;
+          yourPubkey = getPublicKey(yourPrivkey);
+        } catch (e) {
+          statusDiv.innerHTML = '<div class="error">❌ Invalid NSEC: ' + e.message + '</div>';
+          return;
+        }
+
+        // Disable button
+        $("#claimBtn").disabled = true;
+        statusDiv.innerHTML = '<div class="info"><span class="spinner"></span>Connecting to relays...</div>';
+
+        try {
+          // Create pool and connect
+          pool = new SimplePool();
+          await Promise.all(relays.map((r) => pool.ensureRelay(r).catch(() => null)));
+
+          statusDiv.innerHTML = '<div class="info"><span class="spinner"></span>Sending giveaway request...</div>';
+
+          // First, get the method signature to find the correct parameter name
+          statusDiv.innerHTML = '<div class="info"><span class="spinner"></span>Getting method signature...</div>';
+          
+          const methodsRequest = await finalizeEvent({
+            kind: 22068,
+            created_at: Math.floor(Date.now() / 1000),
+            tags: [
+              ["p", serverPubkey],
+              ["method", "getMethods"],
+            ],
+            content: "",
+            pubkey: yourPubkey,
+          }, yourPrivkey);
+
+          await Promise.all(pool.publish(relays, methodsRequest));
+          
+          const methodsResponse = await waitForResponse(relays, methodsRequest.id, 10000);
+          
+          let paramName = "I want to receive ecash!"; // default
+          if (methodsResponse.ok) {
+            // Find the giveaway parameter name
+            const giveawayParam = methodsResponse.event.tags.find(t => 
+              t[0] === "result" && t[1] === "param" && t[2] === "giveaway"
+            );
+            if (giveawayParam && giveawayParam[3]) {
+              paramName = giveawayParam[3];
+              console.log("Found giveaway param name:", paramName);
+            }
+          }
+
+          statusDiv.innerHTML = '<div class="info"><span class="spinner"></span>Sending giveaway request with param: ' + paramName + '</div>';
+
+          // Create a dummy event to use as the parameter value
+          const dummyEvent = {
+            kind: 1,
+            pubkey: yourPubkey,
+            created_at: Math.floor(Date.now() / 1000),
+            tags: [],
+            content: "Claiming ecash giveaway",
+            id: "dummy",
+            sig: "dummy"
+          };
+
+          // Build the request event (kind 22068)
+          const requestEvent = {
+            kind: 22068,
+            created_at: Math.floor(Date.now() / 1000),
+            tags: [
+              ["p", serverPubkey],
+              ["method", "giveaway"],
+              ["param", paramName, JSON.stringify(dummyEvent)],
+            ],
+            content: "",
+            pubkey: yourPubkey,
+          };
+
+          const signedRequest = await finalizeEvent(requestEvent, yourPrivkey);
+
+          console.log("Publishing request:", signedRequest);
+
+          // Publish the request
+          await Promise.all(pool.publish(relays, signedRequest));
+
+          statusDiv.innerHTML = '<div class="info"><span class="spinner"></span>Waiting for response (timeout: 30s)...</div>';
+
+          // Wait for response (kind 22069)
+          const response = await waitForResponse(relays, signedRequest.id, 30000);
+
+          if (response.ok) {
+            const ev = response.event;
+            const statusTag = ev.tags.find((t) => t[0] === "status");
+            const status = statusTag ? statusTag[1] : "unknown";
+
+            if (status === "200") {
+              // Success!
+              const resultJsonTag = ev.tags.find((t) => t[0] === "result_json");
+              const errorTag = ev.tags.find((t) => t[0] === "error");
+
+              if (errorTag) {
+                statusDiv.innerHTML = '<div class="error">❌ Server returned error: ' + errorTag[2] + '</div>';
+              } else if (resultJsonTag) {
+                const result = JSON.parse(resultJsonTag[1]);
+                statusDiv.innerHTML = '<div class="success">✅ Ecash claimed successfully!</div>';
+                resultDiv.innerHTML = `
+                  <h3 style="margin-top: 0">Ecash Token:</h3>
+                  <div class="info">
+                    <strong>Token:</strong>
+                    <div class="token-display mono">${escapeHtml(result.token || "N/A")}</div>
+                  </div>
+                  <div class="info" style="margin-top: 12px">
+                    💬 The server has also sent you a DM with the token. Check your Nostr DMs!
+                  </div>
+                  <h4>Full Response:</h4>
+                  <pre>${escapeHtml(JSON.stringify(result, null, 2))}</pre>
+                `;
+              } else {
+                statusDiv.innerHTML = '<div class="success">✅ Request successful (no token in response, check DMs)</div>';
+                resultDiv.innerHTML = '<pre>' + escapeHtml(JSON.stringify(ev, null, 2)) + '</pre>';
+              }
+            } else {
+              const errorTag = ev.tags.find((t) => t[0] === "error");
+              const errorMsg = errorTag ? errorTag[2] : "Unknown error";
+              statusDiv.innerHTML = '<div class="error">❌ Server returned status ' + status + ': ' + errorMsg + '</div>';
+            }
+          } else {
+            statusDiv.innerHTML = '<div class="error">❌ No response from server (timeout). The server might be offline or the giveaway might be exhausted.</div>';
+          }
+        } catch (err) {
+          console.error("Error:", err);
+          statusDiv.innerHTML = '<div class="error">❌ Error: ' + err.message + '</div>';
+        } finally {
+          $("#claimBtn").disabled = false;
+        }
+      };
+
+      async function waitForResponse(relays, requestId, timeoutMs) {
+        return new Promise((resolve) => {
+          let resolved = false;
+
+          const filter = {
+            kinds: [22069],
+            "#e": [requestId],
+            limit: 1,
+          };
+
+          const sub = pool.subscribeMany(relays, [filter], {
+            onevent: (ev) => {
+              if (resolved) return;
+              resolved = true;
+              sub.close?.();
+              resolve({ ok: true, event: ev });
+            },
+          });
+
+          setTimeout(() => {
+            if (resolved) return;
+            resolved = true;
+            sub.close?.();
+            resolve({ ok: false, reason: "timeout" });
+          }, timeoutMs);
+        });
+      }
+
+      function escapeHtml(s) {
+        if (!s && s !== 0) return "";
+        return String(s)
+          .replaceAll("&", "&amp;")
+          .replaceAll("<", "&lt;")
+          .replaceAll(">", "&gt;")
+          .replaceAll('"', "&quot;")
+          .replaceAll("'", "&#39;");
+      }
+    </script>
+  </body>
+</html>

@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Test NRPC Server Status</title>
+    <style>
+      body {
+        font-family: system-ui;
+        max-width: 800px;
+        margin: 40px auto;
+        padding: 20px;
+      }
+      .test { margin: 20px 0; padding: 15px; border-radius: 8px; }
+      .success { background: #d1fae5; border: 1px solid #6ee7b7; }
+      .error { background: #fee2e2; border: 1px solid #fca5a5; }
+      .info { background: #dbeafe; border: 1px solid #93c5fd; }
+      button { padding: 10px 20px; background: #0369a1; color: white; border: 0; border-radius: 6px; cursor: pointer; }
+      pre { background: #1e293b; color: #e2e8f0; padding: 10px; border-radius: 4px; overflow-x: auto; font-size: 12px; }
+    </style>
+  </head>
+  <body>
+    <h1>NRPC Server Status Checker</h1>
+    <button id="testBtn">Test Servers</button>
+    <div id="results"></div>
+
+    <script type="module">
+      import {
+        SimplePool,
+        nip19,
+        getPublicKey,
+        generateSecretKey,
+        finalizeEvent,
+      } from "https://esm.sh/nostr-tools@2.12.0";
+
+      const servers = [
+        "npub1svldf03s8g4gsdc6lju4qu9u7wc9sqegzhk3axecpntfdgz50yzqvhde75",
+        "npub1awsxkhcll3fdjtmmjes0mwj30upsunnn7688n92w557dse06fuwsajfqau"
+      ];
+
+      const relays = [
+        "wss://relay.damus.io",
+        "wss://relay.snort.social",
+        "wss://relay.primal.net",
+        "wss://relay.nostr.band"
+      ];
+
+      document.getElementById("testBtn").onclick = async () => {
+        const resultsDiv = document.getElementById("results");
+        resultsDiv.innerHTML = '<div class="info">Testing servers...</div>';
+
+        const pool = new SimplePool();
+        await Promise.all(relays.map(r => pool.ensureRelay(r).catch(() => null)));
+
+        for (const npub of servers) {
+          const pubkey = nip19.decode(npub).data;
+          resultsDiv.innerHTML += `<h3>Testing ${npub.substring(0, 20)}...</h3>`;
+
+          // Test 1: Check if server published kind 0
+          const profiles = await pool.querySync(relays, {
+            kinds: [0],
+            authors: [pubkey],
+            limit: 1
+          });
+
+          if (profiles.length > 0) {
+            resultsDiv.innerHTML += '<div class="success">✅ Found profile metadata</div>';
+            resultsDiv.innerHTML += `<pre>${JSON.stringify(JSON.parse(profiles[0].content), null, 2)}</pre>`;
+          } else {
+            resultsDiv.innerHTML += '<div class="error">❌ No profile found</div>';
+          }
+
+          // Test 2: Try getMethods
+          const ephemeralSk = generateSecretKey();
+          const ephemeralPk = getPublicKey(ephemeralSk);
+
+          const request = await finalizeEvent({
+            kind: 22068,
+            created_at: Math.floor(Date.now() / 1000),
+            tags: [
+              ["p", pubkey],
+              ["method", "getMethods"]
+            ],
+            content: "",
+            pubkey: ephemeralPk
+          }, ephemeralSk);
+
+          await Promise.all(pool.publish(relays, request));
+
+          resultsDiv.innerHTML += '<div class="info">⏳ Sent getMethods request, waiting for response...</div>';
+
+          const response = await new Promise((resolve) => {
+            let resolved = false;
+            const sub = pool.subscribeMany(relays, [{
+              kinds: [22069],
+              "#e": [request.id],
+              limit: 1
+            }], {
+              onevent: (ev) => {
+                if (!resolved) {
+                  resolved = true;
+                  sub.close?.();
+                  resolve(ev);
+                }
+              }
+            });
+
+            setTimeout(() => {
+              if (!resolved) {
+                resolved = true;
+                sub.close?.();
+                resolve(null);
+              }
+            }, 20000);
+          });
+
+          if (response) {
+            resultsDiv.innerHTML += '<div class="success">✅ Server responded!</div>';
+            resultsDiv.innerHTML += `<pre>${JSON.stringify(response, null, 2)}</pre>`;
+          } else {
+            resultsDiv.innerHTML += '<div class="error">❌ No response (server might be offline)</div>';
+          }
+        }
+
+        resultsDiv.innerHTML += '<div class="info">Testing complete!</div>';
+      };
+    </script>
+  </body>
+</html>
